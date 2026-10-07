@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Work Hours Planner</title>
+<style>
+:root{--bg:#f6f4ff;--card:#ffffff;--text:#1d1b2e;--mute:#6b6880;--line:#e4e0f5;--a:#7c5cff;--b:#22c7a9;--warn:#ff6b6b;--ok:#22c7a9;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f0e1a;--card:#1a1830;--text:#f1efff;--mute:#9a97b8;--line:#2d2a4d}}
+:root[data-theme="dark"]{--bg:#0f0e1a;--card:#1a1830;--text:#f1efff;--mute:#9a97b8;--line:#2d2a4d}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Poppins',system-ui,-apple-system,'Segoe UI',sans-serif;min-height:100vh;
+background-image:radial-gradient(600px 300px at 10% -10%,rgba(124,92,255,.25),transparent),radial-gradient(500px 300px at 100% 0,rgba(34,199,169,.2),transparent);background-repeat:no-repeat}
+.wrap{max-width:620px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.5px}
+h1 span{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--mute);font-size:14px;margin:0 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;margin-bottom:16px;box-shadow:0 10px 30px rgba(80,60,160,.08)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+label{display:block;font-size:12px;color:var(--mute);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:16px;outline:none}
+input:focus{border-color:var(--a);box-shadow:0 0 0 3px rgba(124,92,255,.2)}
+.sec{font-size:13px;font-weight:600;margin:0 0 14px;color:var(--a)}
+.hero{background:linear-gradient(135deg,var(--a),#a07bff 55%,var(--b));color:#fff;border:none;text-align:center}
+.hero .big{font-size:34px;font-weight:700;margin:6px 0}
+.hero .s{opacity:.9;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.stat{background:rgba(255,255,255,.18);border-radius:14px;padding:10px 6px}
+.stat b{display:block;font-size:16px}.stat small{font-size:11px;opacity:.85}
+.bar{position:relative;height:30px;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px}
+.seg{position:absolute;top:0;bottom:0}
+.ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:6px}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--mute);margin-top:12px;flex-wrap:wrap}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.msg{padding:12px 14px;border-radius:12px;font-size:14px;margin-top:12px}
+.warn{background:rgba(255,107,107,.14);color:var(--warn);border:1px solid rgba(255,107,107,.35)}
+.good{background:rgba(34,199,169,.14);color:var(--ok);border:1px solid rgba(34,199,169,.35)}
+.tf{position:relative;display:flex;gap:8px}
+.tf input.t{flex:1;min-width:0}
+.tf input.bad{border-color:var(--warn)}
+.tf .pk{width:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--a);font-size:18px;cursor:pointer}
+.tf .pk:hover{border-color:var(--a)}
+.tf input.hid{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;padding:0;border:0}
+.hint{color:var(--mute);font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const h = React.createElement, { useState, useEffect, useRef } = React;
+const WIN_START = 8 * 60, WIN_END = 20 * 60;
+const toMin = t => { if (!t) return null; const [a, b] = t.split(':').map(Number); return a * 60 + b; };
+const dur = m => { const s = Math.max(0, Math.round(m)); return Math.floor(s / 60) + 'h ' + String(s % 60).padStart(2, '0') + 'm'; };
+const clock = m => { m = Math.round(m); let H = Math.floor(m / 60), M = m % 60, ap = H >= 12 ? 'PM' : 'AM'; H = H % 12 || 12; return H + ':' + String(M).padStart(2, '0') + ' ' + ap; };
+const pct = m => ((Math.min(Math.max(m, WIN_START), WIN_END) - WIN_START) / (WIN_END - WIN_START)) * 100;
+
+function Field(p) {
+  return h('div', null, h('label', null, p.label),
+    h('input', { type: p.type || 'time', value: p.value, onChange: e => p.set(e.target.value), min: p.min }),
+    p.hint ? h('div', { className: 'hint' }, p.hint) : null);
+}
+
+const pad = n => String(n).padStart(2, '0');
+function parseTime(str) {
+  let s = str.trim().toLowerCase().replace(/\s+/g, '');
+  const m0 = s.match(/(am|pm|a|p)$/); const ap = m0 ? m0[1][0] : null;
+  if (m0) s = s.slice(0, -m0[1].length);
+  s = s.replace(/[.\-]/g, ':').replace(/^:|:$/g, '');
+  const m = s.match(/^(\d{1,2}):?(\d{2})?$/); if (!m) return null;
+  let H = +m[1], M = m[2] ? +m[2] : 0;
+  if (H > 23 || M > 59) return null;
+  if (ap === 'p' && H < 12) H += 12;
+  else if (ap === 'a' && H === 12) H = 0;
+  else if (!ap && H >= 1 && H <= 7) H += 12;
+  return pad(H) + ':' + pad(M);
+}
+function parseDur(str) {
+  let s = str.trim().toLowerCase().replace(/h|\.|\s+/g, ':').replace(/m/g, '').replace(/^:|:$/g, '');
+  let H, M;
+  if (s.includes(':')) { const a = s.split(':'); H = +a[0]; M = +(a[1] || 0); }
+  else if (s.length > 2) { H = +s.slice(0, -2); M = +s.slice(-2); }
+  else { H = +s; M = 0; }
+  if (isNaN(H) || isNaN(M) || M > 59 || H > 24) return null;
+  return pad(H) + ':' + pad(M);
+}
+function TimeField(p) {
+  const isDur = p.mode === 'dur';
+  const show = v => !v ? '' : isDur ? v : clock(toMin(v));
+  const [d, setD] = useState(show(p.value));
+  const [bad, setBad] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => { setD(show(p.value)); setBad(false); }, [p.value]);
+  const commit = () => {
+    if (d.trim() === '') { if (p.optional) { p.set(''); setBad(false); } else setD(show(p.value)); return; }
+    const v = isDur ? parseDur(d) : parseTime(d);
+    if (v) { p.set(v); setD(show(v)); setBad(false); } else setBad(true);
+  };
+  const pick = () => { const el = ref.current; try { el.showPicker(); } catch (e) { el.focus(); el.click(); } };
+  return h('div', null, h('label', null, p.label),
+    h('div', { className: 'tf' },
+      h('input', { className: 't' + (bad ? ' bad' : ''), type: 'text', inputMode: 'text', value: d, placeholder: p.placeholder,
+        onChange: e => setD(e.target.value), onBlur: commit, onKeyDown: e => { if (e.key === 'Enter') e.target.blur(); } }),
+      isDur ? null : h('button', { type: 'button', className: 'pk', onClick: pick, title: 'Pick time', 'aria-label': 'Pick time' }, '🕒'),
+      isDur ? null : h('input', { ref, className: 'hid', type: 'time', tabIndex: -1, value: p.value || '', onChange: e => e.target.value && p.set(e.target.value) })),
+    bad ? h('div', { className: 'hint', style: { color: 'var(--warn)' } }, 'Couldn\u2019t read that — try ' + (isDur ? '9:25' : '9:30 am')) : (p.hint ? h('div', { className: 'hint' }, p.hint) : null));
+}
+
+function App() {
+  const [inT, setIn] = useState('08:00');
+  const [outT, setOut] = useState('11:30');
+  const [total, setTotal] = useState('09:25');
+  const [minOff, setMinOff] = useState('03:30');
+  const [gap, setGap] = useState('30');
+  const [custom, setCustom] = useState('');
+
+  const i = toMin(inT), o = toMin(outT), T = toMin(total), M = toMin(minOff);
+  const valid = i != null && o != null && o > i && T != null;
+  const office = valid ? o - i : 0;
+  const need = valid ? Math.max(0, T - office) : 0;
+  const gapM = Math.max(0, parseInt(gap) || 0);
+  const suggested = valid ? o + gapM : 0;
+  const cs = toMin(custom);
+  const start = cs != null ? cs : suggested;
+  const end = start + need;
+
+  const msgs = [];
+  if (valid && i < WIN_START) msgs.push(['warn', 'Office in-time is before 8:00 AM window.']);
+  if (valid && office < M) msgs.push(['warn', 'Office time is ' + dur(office) + ' — short of the compulsory ' + dur(M) + ' by ' + dur(M - office) + '.']);
+  if (valid && office >= M) msgs.push(['good', 'Compulsory office time done (' + dur(office) + ').']);
+  if (valid && need > 0 && start < WIN_START) msgs.push(['warn', 'WFH start is before the 8:00 AM window.']);
+  if (valid && need > 0 && end > WIN_END) msgs.push(['warn', 'WFH would end at ' + clock(end) + ', past 8:00 PM. Start earlier by ' + dur(end - WIN_END) + '.']);
+  if (valid && need === 0) msgs.push(['good', 'You have already completed ' + dur(T) + '. No WFH needed!']);
+
+  const bad = valid && need > 0 && (end > WIN_END || start < WIN_START);
+
+  return h('div', { className: 'wrap' },
+    h('h1', null, 'Work Hours ', h('span', null, 'Planner')),
+    h('p', { className: 'sub' }, 'Enter your office in/out time — get your WFH slot between 8 AM and 8 PM.'),
+
+    h('div', { className: 'card' },
+      h('p', { className: 'sec' }, '🏢 Work from office'),
+      h('div', { className: 'grid' },
+        h(TimeField, { label: 'Office in', value: inT, set: setIn, placeholder: '8:00 AM', hint: 'Type (830, 8:30 am) or tap 🕒' }),
+        h(TimeField, { label: 'Office out', value: outT, set: setOut, placeholder: '11:30 AM', hint: '1–7 is read as PM' })),
+      !valid ? h('div', { className: 'msg warn' }, 'Out time must be after in time.') : null),
+
+    h('div', { className: 'card' },
+      h('p', { className: 'sec' }, '⚙️ Targets'),
+      h('div', { className: 'grid' },
+        h(TimeField, { mode: 'dur', label: 'Total hours', value: total, set: setTotal, placeholder: '9:25', hint: 'Type 9:25, 9.25 or 925' }),
+        h(TimeField, { mode: 'dur', label: 'Min. office time', value: minOff, set: setMinOff, placeholder: '3:30', hint: 'Compulsory 3h 30m' }),
+        h(Field, { label: 'Break before WFH (min)', type: 'number', value: gap, set: setGap, min: 0, hint: 'Suggested start = out time + break' }),
+        h(TimeField, { optional: true, label: 'My WFH start (optional)', value: custom, set: setCustom, placeholder: 'auto', hint: 'Leave empty for suggestion' }))),
+
+    valid ? h('div', { className: 'card hero' },
+      h('div', { className: 's' }, need > 0 ? (cs != null ? 'Your WFH slot' : 'Suggested WFH slot') : 'All done'),
+      h('div', { className: 'big' }, need > 0 ? clock(start) + ' → ' + clock(end) : '🎉'),
+      h('div', { className: 's' }, need > 0 ? 'WFH needed: ' + dur(need) : 'Office hours cover your target'),
+      h('div', { className: 'stats' },
+        h('div', { className: 'stat' }, h('b', null, dur(office)), h('small', null, 'In office')),
+        h('div', { className: 'stat' }, h('b', null, dur(need)), h('small', null, 'WFH needed')),
+        h('div', { className: 'stat' }, h('b', null, dur(Math.max(T, office))), h('small', null, 'Total')))) : null,
+
+    valid ? h('div', { className: 'card' },
+      h('p', { className: 'sec' }, '🕗 Day timeline (8 AM – 8 PM)'),
+      h('div', { className: 'bar' },
+        h('div', { className: 'seg', style: { left: pct(i) + '%', width: (pct(o) - pct(i)) + '%', background: 'var(--a)' } }),
+        need > 0 ? h('div', { className: 'seg', style: { left: pct(start) + '%', width: Math.max(0, pct(end) - pct(start)) + '%', background: bad ? 'var(--warn)' : 'var(--b)' } }) : null),
+      h('div', { className: 'ticks' }, ['8 AM', '11 AM', '2 PM', '5 PM', '8 PM'].map(t => h('span', { key: t }, t))),
+      h('div', { className: 'legend' },
+        h('span', null, h('i', { className: 'dot', style: { background: 'var(--a)' } }), 'Office'),
+        h('span', null, h('i', { className: 'dot', style: { background: 'var(--b)' } }), 'WFH')),
+      msgs.map((m, k) => h('div', { key: k, className: 'msg ' + m[0] }, m[1]))) : null
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
